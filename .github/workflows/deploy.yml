@@ -1,0 +1,82 @@
+name: Deploy Bicep
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# id-token: write lets the job request an OIDC token from GitHub.
+# Without it, azure/login has nothing to exchange and the login step fails.
+permissions:
+  id-token: write
+  contents: read
+
+# Change these to the resource groups you created in SETUP.md.
+env:
+  DEV_RESOURCE_GROUP: rg-bicep-dev
+  PROD_RESOURCE_GROUP: rg-bicep-prod
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    # Jobs that use an environment send the subject
+    # repo:OWNER/REPO:environment:dev, so Entra needs a matching credential.
+    environment: dev
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: What-If
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.DEV_RESOURCE_GROUP }}
+          template: ./main.bicep
+          parameters: ./dev.bicepparam
+          additionalArguments: --what-if
+
+      - name: Deploy
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.DEV_RESOURCE_GROUP }}
+          template: ./main.bicep
+          parameters: ./dev.bicepparam
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    # Runs only after deploy-dev succeeds.
+    needs: deploy-dev
+    # The prod environment's protection rules (deployment branch, and
+    # required reviewers if you add them) apply before this job starts.
+    environment: prod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: What-If Production
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.PROD_RESOURCE_GROUP }}
+          template: ./main.bicep
+          parameters: ./prod.bicepparam
+          additionalArguments: --what-if
+
+      - name: Deploy Production
+        uses: azure/arm-deploy@v2
+        with:
+          resourceGroupName: ${{ env.PROD_RESOURCE_GROUP }}
+          template: ./main.bicep
+          parameters: ./prod.bicepparam

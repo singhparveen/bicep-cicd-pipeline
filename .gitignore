@@ -1,0 +1,13 @@
+# Compiled ARM output from `az bicep build`
+*.json
+
+# Azure CLI / local auth
+.azure/
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
